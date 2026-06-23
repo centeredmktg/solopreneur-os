@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Solopreneur OS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,300..600&family=DM+Sans:ital,opsz,wght@0,9..40,400..600;1,9..40,400..500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#e7e6f8; --bg-deep:#dedcf3; --surface:#fff; --surface-soft:#f4f3fc;
+  --ink:#191736; --slate:#4a4960; --slate-soft:#6f6e85;
+  --accent:#e79bef; --accent-deep:#d981e4; --accent-tint:#f6e4f9;
+  --now:#e9728f; --now-tint:#fbe6ec; --next:#e0a64e; --next-tint:#fbf0db;
+  --later:#6aa98f; --later-tint:#e4f1ea;
+  --r-pill:999px; --r-lg:26px; --r-md:18px; --r-sm:12px;
+  --shadow-soft:0 18px 50px -24px rgba(25,23,54,.28);
+  --serif:"Fraunces",Georgia,serif; --sans:"DM Sans",system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--sans);color:var(--slate);background:var(--bg);min-height:100vh;line-height:1.6;
+  background-image:radial-gradient(1100px 700px at 12% -8%,#f0eafb 0,transparent 55%),
+    radial-gradient(900px 650px at 105% 8%,#f7e7fa 0,transparent 50%),
+    radial-gradient(800px 800px at 50% 120%,var(--bg-deep) 0,transparent 60%);
+  -webkit-font-smoothing:antialiased}
+.wrap{max-width:1100px;margin:0 auto;padding:0 28px}
+header{display:flex;align-items:center;justify-content:space-between;padding:28px 0 10px;flex-wrap:wrap;gap:12px}
+.mark{font-family:var(--serif);font-weight:500;font-size:1.4rem;color:var(--ink);letter-spacing:-.01em}
+.mark em{font-style:italic}
+nav{display:flex;gap:8px;flex-wrap:wrap}
+.chip{font-size:.82rem;color:var(--slate);padding:9px 17px;border-radius:var(--r-pill);
+  background:rgba(255,255,255,.55);border:1px solid rgba(25,23,54,.06);cursor:pointer;transition:.2s}
+.chip:hover{background:#fff;color:var(--ink)}
+.chip.active{background:var(--ink);color:#fff;border-color:transparent}
+.hero{padding:40px 0 20px;max-width:720px}
+.eyebrow{font-size:.76rem;letter-spacing:.2em;text-transform:uppercase;color:var(--accent-deep);font-weight:500;margin-bottom:16px}
+h1{font-family:var(--serif);color:var(--ink);font-weight:400;font-size:clamp(2.2rem,5vw,3.4rem);line-height:1.04;letter-spacing:-.02em}
+h1 em{font-style:italic}
+.sub{margin-top:16px;font-size:1.05rem;max-width:560px}
+.tool{margin:26px 0 60px;background:var(--surface);border-radius:var(--r-lg);box-shadow:var(--shadow-soft);overflow:hidden;border:1px solid rgba(255,255,255,.8)}
+.tool-head{padding:26px 32px 18px;border-bottom:1px solid var(--surface-soft)}
+.tool-head h2{font-family:var(--serif);font-weight:400;color:var(--ink);font-size:1.6rem}
+.tool-head p{color:var(--slate-soft);font-size:.93rem;margin-top:3px}
+.grid{display:grid;grid-template-columns:1fr 1.05fr;min-height:380px}
+@media(max-width:840px){.grid{grid-template-columns:1fr}}
+.panel{padding:26px 32px}
+.panel.input{background:var(--surface-soft);border-right:1px solid #ececf7}
+@media(max-width:840px){.panel.input{border-right:none;border-bottom:1px solid #ececf7}}
+label{display:block;font-size:.76rem;letter-spacing:.14em;text-transform:uppercase;color:var(--slate-soft);margin-bottom:10px}
+input[type=text]{width:100%;font-family:var(--sans);font-size:.95rem;color:var(--ink);border:1px solid #e2e1f0;border-radius:var(--r-sm);padding:11px 14px;margin-bottom:14px;background:#fff}
+textarea{width:100%;min-height:210px;resize:vertical;font-family:var(--sans);font-size:.97rem;color:var(--ink);line-height:1.6;border:1px solid #e2e1f0;border-radius:var(--r-md);padding:16px 18px;background:#fff;transition:.2s}
+textarea:focus,input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-tint)}
+.btn{font-family:var(--sans);font-weight:500;font-size:1rem;cursor:pointer;border:none;border-radius:var(--r-pill);padding:15px 32px;background:var(--accent);color:var(--ink);box-shadow:0 12px 28px -12px var(--accent-deep);transition:.2s;margin-top:16px}
+.btn:hover{background:var(--accent-deep);transform:translateY(-2px)}
+.btn:disabled{opacity:.55;cursor:wait;transform:none}
+.btn.ghost{background:rgba(255,255,255,.6);box-shadow:none;border:1px solid rgba(25,23,54,.1);padding:9px 18px;font-size:.85rem;margin:0}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.out{font-size:.97rem;color:var(--slate);white-space:pre-wrap;min-height:60px}
+.out h4{font-family:var(--serif);color:var(--ink);font-size:1.05rem;margin:14px 0 8px;font-weight:500}
+.out strong{color:var(--ink)}
+.out .placeholder{color:var(--slate-soft);font-style:italic}
+.out-actions{margin-top:16px;display:none}
+.entry{display:flex;justify-content:space-between;gap:12px;padding:11px 15px;border-radius:var(--r-sm);background:var(--surface-soft);margin-bottom:8px;font-size:.93rem}
+.entry .min{color:var(--accent-deep);font-weight:600;white-space:nowrap}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:12px 22px;border-radius:var(--r-pill);font-size:.9rem;opacity:0;transition:.3s;pointer-events:none}
+.toast.show{opacity:1}
+footer{padding:28px 0 50px;text-align:center;color:var(--slate-soft);font-size:.84rem}
+footer em{font-family:var(--serif);font-style:italic}
+.copy{cursor:pointer}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span class="mark">Solopreneur <em>OS</em></span>
+    <nav>
+      <a class="chip active" data-tab="priority">Priority Engine</a>
+      <a class="chip" data-tab="report">Monthly Report</a>
+      <a class="chip" data-tab="time">Time → Moxie</a>
+      <a class="chip" id="settingsBtn">⚙</a>
+    </nav>
+  </header>
+
+  <!-- PRIORITY -->
+  <section class="hero" data-pane="priority">
+    <div class="eyebrow">Your toolkit</div>
+    <h1>Turn the chaos<br>into a <em>calm</em> plan.</h1>
+    <p class="sub">Paste whatever a client throws at you — Slack, email, the dreaded text thread — and get back a clear, prioritized plan you can run with, or send right back to them.</p>
+  </section>
+  <section class="tool" data-pane="priority">
+    <div class="tool-head"><h2>Priority Engine</h2><p>Word vomit in. Organized, prioritized plan out.</p></div>
+    <div class="grid">
+      <div class="panel input">
+        <label>Client name (optional)</label>
+        <input type="text" id="p_client" placeholder="e.g. Habitat Modern">
+        <label>The dump</label>
+        <textarea id="p_dump" placeholder="Paste the client's messages here — any format, any channel..."></textarea>
+        <button class="btn" data-run="priority">Organize it &nbsp;→</button>
+      </div>
+      <div class="panel"><div class="out" id="p_out"><span class="placeholder">Your sorted plan will appear here.</span></div>
+        <div class="out-actions" id="p_actions"><button class="btn ghost copy" data-copy="p_out">Copy</button></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- REPORT -->
+  <section class="hero" data-pane="report" hidden>
+    <div class="eyebrow">Your toolkit</div>
+    <h1>The monthly update,<br><em>written</em> for you.</h1>
+    <p class="sub">Dump your notes for a client — what you handled, what you caught, hours used — and get a warm, one-page recap that makes your work visible.</p>
+  </section>
+  <section class="tool" data-pane="report" hidden>
+    <div class="tool-head"><h2>Monthly Report</h2><p>Rough notes in. Client-ready recap out.</p></div>
+    <div class="grid">
+      <div class="panel input">
+        <label>This month's notes</label>
+        <textarea id="r_notes" placeholder="Client: ...&#10;Plan: Momentum, used ~14 hrs&#10;- redid welcome packet in Canva&#10;- flagged the vendor double-bill, saved ~$400&#10;- waiting on approval of the new pricing sheet"></textarea>
+        <button class="btn" data-run="report">Write the update &nbsp;→</button>
+      </div>
+      <div class="panel"><div class="out" id="r_out"><span class="placeholder">Your client update will appear here.</span></div>
+        <div class="out-actions" id="r_actions"><button class="btn ghost copy" data-copy="r_out">Copy</button></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TIME -->
+  <section class="hero" data-pane="time" hidden>
+    <div class="eyebrow">Your toolkit</div>
+    <h1>Stop compiling<br><em>time</em> by hand.</h1>
+    <p class="sub">Dump what you worked on. Get clean, billable time entries — and push them straight into Moxie when you're ready.</p>
+  </section>
+  <section class="tool" data-pane="time" hidden>
+    <div class="tool-head"><h2>Task → Time</h2><p>Work notes in. Billable entries out.</p></div>
+    <div class="grid">
+      <div class="panel input">
+        <label>What you worked on</label>
+        <textarea id="t_notes" placeholder="Cleared Holly's inbox daily, ~3 hrs total&#10;Spent 45 min on the new client onboarding for Kate&#10;Designed 2 Canva graphics, about an hour&#10;Reconciled invoices Tuesday, 30 min"></textarea>
+        <div class="row">
+          <button class="btn" data-run="time">Parse entries &nbsp;→</button>
+        </div>
+      </div>
+      <div class="panel"><div class="out" id="t_out"><span class="placeholder">Your time entries will appear here.</span></div>
+        <div class="out-actions" id="t_actions"><button class="btn ghost" id="t_push">Push to Moxie</button></div>
+      </div>
+    </div>
+  </section>
+
+  <footer>Built with <em>care</em> · Solopreneur OS</footer>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const KEY_STORE = "solopreneur_app_key";
+function appKey(){ return localStorage.getItem(KEY_STORE) || ""; }
+function setKey(){ const k = prompt("Enter your app key:", appKey()); if(k!==null) localStorage.setItem(KEY_STORE,k.trim()); }
+document.getElementById("settingsBtn").onclick = setKey;
+
+function toast(msg){ const t=document.getElementById("toast"); t.textContent=msg; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),2600); }
+
+// tiny markdown -> html (bold + bullets + headings on **lines**)
+function md(text){
+  return text.split("\n").map(line=>{
+    let l = line.replace(/\*\*(.+?)\*\*/g,"<strong>$1</strong>");
+    if(/^\s*[-*]\s+/.test(line)) l = "• " + l.replace(/^\s*[-*]\s+/,"");
+    return l;
+  }).join("<br>");
+}
+
+// tab switching
+document.querySelectorAll(".chip[data-tab]").forEach(chip=>{
+  chip.onclick = ()=>{
+    const tab = chip.dataset.tab;
+    document.querySelectorAll(".chip[data-tab]").forEach(c=>c.classList.toggle("active",c===chip));
+    document.querySelectorAll("[data-pane]").forEach(p=>{ p.hidden = (p.dataset.pane!==tab); });
+  };
+});
+
+async function api(path, body){
+  const r = await fetch(path,{method:"POST",headers:{"Content-Type":"application/json","X-App-Key":appKey()},body:JSON.stringify(body)});
+  if(r.status===401){ toast("App key required — click ⚙"); throw new Error("auth"); }
+  const data = await r.json();
+  if(!r.ok) throw new Error(data.detail || "Something went wrong");
+  return data;
+}
+
+function runState(btn,on){ btn.disabled=on; btn.dataset.label=btn.dataset.label||btn.textContent; btn.textContent = on ? "Working…" : btn.dataset.label; }
+
+document.querySelectorAll("[data-run]").forEach(btn=>{
+  btn.onclick = async ()=>{
+    const kind = btn.dataset.run;
+    try{
+      runState(btn,true);
+      if(kind==="priority"){
+        const out=document.getElementById("p_out");
+        const data = await api("/api/priority",{dump:document.getElementById("p_dump").value,client_name:document.getElementById("p_client").value||null});
+        out.innerHTML = md(data.plan); document.getElementById("p_actions").style.display="block";
+      } else if(kind==="report"){
+        const out=document.getElementById("r_out");
+        const data = await api("/api/report",{notes:document.getElementById("r_notes").value});
+        out.innerHTML = md(data.report); document.getElementById("r_actions").style.display="block";
+      } else if(kind==="time"){
+        const out=document.getElementById("t_out");
+        const data = await api("/api/moxie/time",{notes:document.getElementById("t_notes").value});
+        out._entries = data.entries;
+        out.innerHTML = data.entries.length
+          ? data.entries.map(e=>`<div class="entry"><span><strong>${e.description}</strong>${e.client?` · ${e.client}`:""}${e.date?` · ${e.date}`:""}</span><span class="min">${e.minutes}m</span></div>`).join("")
+          : "<span class='placeholder'>No entries found.</span>";
+        const actions=document.getElementById("t_actions");
+        actions.style.display = data.entries.length ? "block":"none";
+        document.getElementById("t_push").disabled = !data.moxie_configured;
+        document.getElementById("t_push").textContent = data.moxie_configured ? "Push to Moxie" : "Connect Moxie to push";
+      }
+    }catch(e){ if(e.message!=="auth") toast(e.message); }
+    finally{ runState(btn,false); }
+  };
+});
+
+document.getElementById("t_push").onclick = async ()=>{
+  const btn=document.getElementById("t_push");
+  try{ btn.disabled=true; btn.textContent="Pushing…";
+    const data = await api("/api/moxie/time",{notes:document.getElementById("t_notes").value,commit:true});
+    toast(`Pushed ${data.results.length} entries to Moxie ✓`);
+  }catch(e){ if(e.message!=="auth") toast(e.message); }
+  finally{ btn.disabled=false; btn.textContent="Push to Moxie"; }
+};
+
+document.querySelectorAll(".copy").forEach(b=>{
+  b.onclick = ()=>{ const el=document.getElementById(b.dataset.copy); navigator.clipboard.writeText(el.innerText); toast("Copied"); };
+});
+</script>
+</body>
+</html>
