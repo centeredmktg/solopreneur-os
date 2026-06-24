@@ -222,25 +222,33 @@ const PRI = {now:"Now · this week",next:"Next · this month",later:"Later · pa
 function esc(s){return (s||"").replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');}
 
 // ---- live Moxie data (clients + projects), loaded once ----
-const MX = {loaded:false, clients:[], projects:[]};
+const MX = {loaded:false, clients:[], projects:[], status:"unloaded"};
 async function loadMoxie(){
   if(MX.loaded) return MX;
   const opt={headers:{"X-App-Key":appKey()}};
-  const [c,p] = await Promise.all([
-    fetch("/api/moxie/clients",opt).then(r=>r.ok?r.json():{clients:[]}).catch(()=>({clients:[]})),
-    fetch("/api/moxie/projects",opt).then(r=>r.ok?r.json():{projects:[]}).catch(()=>({projects:[]})),
-  ]);
-  MX.clients=c.clients||[]; MX.projects=p.projects||[]; MX.loaded=true; return MX;
+  try{
+    const cr=await fetch("/api/moxie/clients",opt);
+    if(cr.status===401) MX.status="no-key";
+    else if(cr.status===501) MX.status="not-connected";
+    else if(cr.ok){ MX.clients=(await cr.json()).clients||[]; MX.status="ok"; }
+    else MX.status="error";
+    const pr=await fetch("/api/moxie/projects",opt);
+    if(pr.ok) MX.projects=(await pr.json()).projects||[];
+  }catch(e){ MX.status="error"; }
+  MX.loaded=true; return MX;
 }
 function fillClientDropdown(){
-  if(!MX.clients.length) return;
+  // When the list is empty, say WHY instead of silently showing the placeholder.
+  const reason = MX.status==="no-key" ? "Enter app key — click ⚙"
+    : MX.status==="not-connected" ? "Moxie not connected"
+    : MX.status==="error" ? "Couldn't reach Moxie" : null;
   const opts = MX.clients.map(c=>`<option value="${esc(c.name)}">${esc(c.name)}</option>`).join("");
   // p_client/t_client allow "unspecified"; r_client (a report is always for one client) does not.
   const placeholders = {p_client:"All / unspecified", t_client:"All / unspecified", r_client:"Select a client…"};
   for(const [id,ph] of Object.entries(placeholders)){
     const sel=document.getElementById(id); if(!sel) continue;
     const cur=sel.value;
-    sel.innerHTML=`<option value="">${ph}</option>`+opts;
+    sel.innerHTML=`<option value="">${reason||ph}</option>`+opts;
     sel.value=cur;
   }
 }
