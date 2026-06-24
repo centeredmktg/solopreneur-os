@@ -80,8 +80,12 @@ textarea:focus,input:focus{outline:none;border-color:var(--accent);box-shadow:0 
 .qbox{margin-top:6px;padding:10px 14px;border-radius:var(--r-sm);background:var(--surface-soft);font-size:.9rem}
 .qbox strong{color:var(--ink)}
 .actions-2{display:flex;gap:10px;flex-wrap:wrap}
-.proj-select{width:100%;font-family:var(--sans);font-size:.9rem;color:var(--ink);border:1px solid #e2e1f0;border-radius:var(--r-pill);padding:10px 14px;margin-bottom:10px;background:#fff}
-.proj-select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-tint)}
+.task-row{flex-wrap:wrap}
+.mx-pickers{flex-basis:100%;display:flex;gap:6px;margin-top:5px}
+.mx-pickers select{flex:1;min-width:0;font-family:var(--sans);font-size:.78rem;color:var(--slate);border:1px solid rgba(25,23,54,.14);border-radius:8px;padding:5px 8px;background:#fff}
+.mx-pickers select:focus{outline:none;border-color:var(--accent)}
+.entry{flex-wrap:wrap}
+.entry .ehead{display:flex;justify-content:space-between;gap:12px;width:100%;align-items:center}
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:12px 22px;border-radius:var(--r-pill);font-size:.9rem;opacity:0;transition:.3s;pointer-events:none}
 .toast.show{opacity:1}
 footer{padding:28px 0 50px;text-align:center;color:var(--slate-soft);font-size:.84rem}
@@ -119,7 +123,6 @@ footer em{font-family:var(--serif);font-style:italic}
       </div>
       <div class="panel"><div class="out" id="p_out"><span class="placeholder">Your sorted, editable plan will appear here.</span></div>
         <div class="out-actions" id="p_actions">
-          <select id="p_project" class="proj-select"><option value="">Loading projects…</option></select>
           <div class="actions-2">
             <button class="btn ghost" id="p_copy">Copy as message</button>
             <button class="btn ghost" id="p_push">Push to Moxie</button>
@@ -211,6 +214,49 @@ async function api(path, body){
 
 function runState(btn,on){ btn.disabled=on; btn.dataset.label=btn.dataset.label||btn.textContent; btn.textContent = on ? "Working…" : btn.dataset.label; }
 
+const PRI = {now:"Now · this week",next:"Next · this month",later:"Later · parking lot"};
+function esc(s){return (s||"").replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');}
+
+// ---- live Moxie data (clients + projects), loaded once ----
+const MX = {loaded:false, clients:[], projects:[]};
+async function loadMoxie(){
+  if(MX.loaded) return MX;
+  const opt={headers:{"X-App-Key":appKey()}};
+  const [c,p] = await Promise.all([
+    fetch("/api/moxie/clients",opt).then(r=>r.ok?r.json():{clients:[]}).catch(()=>({clients:[]})),
+    fetch("/api/moxie/projects",opt).then(r=>r.ok?r.json():{projects:[]}).catch(()=>({projects:[]})),
+  ]);
+  MX.clients=c.clients||[]; MX.projects=p.projects||[]; MX.loaded=true; return MX;
+}
+const clientById = id => MX.clients.find(c=>c.id===id);
+const projectsForClient = id => MX.projects.filter(p=>p.clientId===id);
+function matchClient(name){
+  if(!name) return null; const n=name.trim().toLowerCase();
+  return MX.clients.find(c=>(c.name||"").toLowerCase()===n)
+      || MX.clients.find(c=>(c.name||"").toLowerCase().includes(n)||n.includes((c.name||"").toLowerCase())) || null;
+}
+function projectOptions(clientId, selName){
+  const ps = clientId ? projectsForClient(clientId) : [];
+  return `<option value="">Project…</option>` +
+    ps.map(p=>`<option value="${esc(p.name)}"${p.name===selName?" selected":""}>${esc(p.name)}</option>`).join("");
+}
+function pickersHTML(guessName){
+  const m = matchClient(guessName);
+  const cid = m && m.id;
+  const clientOpts = `<option value="">Client…</option>` +
+    MX.clients.map(c=>`<option value="${c.id}"${c.id===cid?" selected":""}>${esc(c.name)}</option>`).join("");
+  return `<span class="mx-pickers"><select class="mx-client">${clientOpts}</select>`+
+         `<select class="mx-project">${projectOptions(cid,null)}</select></span>`;
+}
+
+// cascade: when a client picker changes, repopulate its sibling project picker
+document.addEventListener("change", e=>{
+  if(e.target.classList && e.target.classList.contains("mx-client")){
+    const proj = e.target.closest(".mx-pickers").querySelector(".mx-project");
+    if(proj) proj.innerHTML = projectOptions(e.target.value, null);
+  }
+});
+
 document.querySelectorAll("[data-run]").forEach(btn=>{
   btn.onclick = async ()=>{
     const kind = btn.dataset.run;
@@ -218,93 +264,68 @@ document.querySelectorAll("[data-run]").forEach(btn=>{
       runState(btn,true);
       if(kind==="priority"){
         const data = await api("/api/priority",{dump:document.getElementById("p_dump").value,client_name:document.getElementById("p_client").value||null});
+        if(data.moxie_configured) await loadMoxie();
         renderPriority(data);
       } else if(kind==="report"){
         const out=document.getElementById("r_out");
         const data = await api("/api/report",{notes:document.getElementById("r_notes").value});
         out.innerHTML = md(data.report); document.getElementById("r_actions").style.display="block";
       } else if(kind==="time"){
-        const out=document.getElementById("t_out");
         const data = await api("/api/moxie/time",{notes:document.getElementById("t_notes").value});
-        out._entries = data.entries;
-        out.innerHTML = data.entries.length
-          ? data.entries.map(e=>`<div class="entry"><span><strong>${e.description}</strong>${e.client?` · ${e.client}`:""}${e.date?` · ${e.date}`:""}</span><span class="min">${e.minutes}m</span></div>`).join("")
-          : "<span class='placeholder'>No entries found.</span>";
-        const actions=document.getElementById("t_actions");
-        actions.style.display = data.entries.length ? "block":"none";
-        document.getElementById("t_push").disabled = !data.moxie_configured;
-        document.getElementById("t_push").textContent = data.moxie_configured ? "Push to Moxie" : "Connect Moxie to push";
+        if(data.moxie_configured) await loadMoxie();
+        renderEntries(data);
       }
     }catch(e){ if(e.message!=="auth") toast(e.message); }
     finally{ runState(btn,false); }
   };
 });
 
-// ---- Priority Engine: structured, editable, push-to-Moxie ----
-const PRI = {now:"Now · this week",next:"Next · this month",later:"Later · parking lot"};
-let priorityMoxieReady = false;
-
+// ---- Priority: structured, editable, per-item assign, push ----
 function renderPriority(data){
   const out = document.getElementById("p_out");
-  priorityMoxieReady = !!data.moxie_configured;
+  const ready = !!data.moxie_configured;
   const tasks = data.tasks || [];
-  if(!tasks.length){ out.innerHTML = "<span class='placeholder'>No tasks found in that dump.</span>"; document.getElementById("p_actions").style.display="none"; return; }
-
-  let html = "";
+  if(!tasks.length){ out.innerHTML="<span class='placeholder'>No tasks found in that dump.</span>"; document.getElementById("p_actions").style.display="none"; return; }
+  const guess = document.getElementById("p_client").value;
+  let html="";
   for(const p of ["now","next","later"]){
-    const group = tasks.filter(t=>t.priority===p);
-    if(!group.length) continue;
+    if(!tasks.some(t=>t.priority===p)) continue;
     html += `<div class="pgroup"><div class="pgroup-title"><span class="dot ${p}"></span>${PRI[p]}</div>`;
     for(const t of tasks){
       if(t.priority!==p) continue;
-      const flag = t.needs_from_client ? `<span class="flag" title="needs from client">⚠ ${t.needs_from_client}</span>` : "";
-      html += `<div class="task-row ${p}" data-area="${t.area||""}">
-        <input class="t-title" value="${(t.title||"").replace(/"/g,'&quot;')}">
+      const flag = t.needs_from_client ? `<span class="flag" title="needs from client">⚠ ${esc(t.needs_from_client)}</span>` : "";
+      html += `<div class="task-row ${p}" data-area="${esc(t.area)}" data-deadline="${esc(t.deadline)}">
+        <input class="t-title" value="${esc(t.title)}">
         <select class="t-pri">
           <option value="now"${p==="now"?" selected":""}>Now</option>
           <option value="next"${p==="next"?" selected":""}>Next</option>
           <option value="later"${p==="later"?" selected":""}>Later</option>
-        </select>${flag}
-        <button class="rm" title="remove">✕</button>
+        </select>${flag}<button class="rm" title="remove">✕</button>
+        ${ready ? pickersHTML(guess) : ""}
       </div>`;
     }
     html += `</div>`;
   }
-  if((data.questions||[]).length){
-    html += `<div class="qbox"><strong>Quick questions before I run with these:</strong><br>` +
-      data.questions.map(q=>"• "+q).join("<br>") + `</div>`;
-  }
+  if((data.questions||[]).length)
+    html += `<div class="qbox"><strong>Quick questions before I run with these:</strong><br>`+data.questions.map(q=>"• "+esc(q)).join("<br>")+`</div>`;
   out.innerHTML = html;
   out.querySelectorAll(".rm").forEach(b=>b.onclick=()=>b.closest(".task-row").remove());
   document.getElementById("p_actions").style.display="block";
-  const push = document.getElementById("p_push");
-  const sel = document.getElementById("p_project");
-  push.disabled = !priorityMoxieReady;
-  push.textContent = priorityMoxieReady ? "Push to Moxie" : "Connect Moxie to push";
-  sel.style.display = priorityMoxieReady ? "block" : "none";
-  if(priorityMoxieReady) loadProjects();
-}
-
-let projectsLoaded = false;
-async function loadProjects(){
-  if(projectsLoaded) return;
-  const sel = document.getElementById("p_project");
-  try{
-    const r = await fetch("/api/moxie/projects",{headers:{"X-App-Key":appKey()}});
-    if(!r.ok) throw new Error();
-    const {projects} = await r.json();
-    sel.innerHTML = `<option value="">Select a project…</option>` +
-      projects.map(p=>`<option value="${(p.name||"").replace(/"/g,'&quot;')}">${p.name}</option>`).join("");
-    projectsLoaded = true;
-  }catch(e){ sel.innerHTML = `<option value="">Couldn't load projects</option>`; }
+  const push=document.getElementById("p_push");
+  push.disabled = !ready; push.textContent = ready ? "Push to Moxie" : "Connect Moxie to push";
 }
 
 function collectTasks(){
-  return [...document.querySelectorAll("#p_out .task-row")].map(row=>({
-    title: row.querySelector(".t-title").value.trim(),
-    priority: row.querySelector(".t-pri").value,
-    area: row.dataset.area || null,
-  })).filter(t=>t.title);
+  return [...document.querySelectorAll("#p_out .task-row")].map(row=>{
+    const cid = row.querySelector(".mx-client")?.value;
+    return {
+      title: row.querySelector(".t-title").value.trim(),
+      priority: row.querySelector(".t-pri").value,
+      project_name: row.querySelector(".mx-project")?.value || null,
+      client_name: cid ? (clientById(cid)?.name || null) : null,
+      deadline: row.dataset.deadline || null,
+    };
+  }).filter(t=>t.title);
 }
 
 document.getElementById("p_copy").onclick = ()=>{
@@ -323,20 +344,52 @@ document.getElementById("p_push").onclick = async ()=>{
   const btn=document.getElementById("p_push");
   const tasks = collectTasks();
   if(!tasks.length){ toast("Nothing to push"); return; }
-  const project = document.getElementById("p_project").value;
-  if(!project){ toast("Pick a project first"); return; }
+  if(!tasks.some(t=>t.project_name)){ toast("Assign at least one task to a project"); return; }
   try{ btn.disabled=true; btn.textContent="Pushing…";
-    const data = await api("/api/moxie/tasks",{tasks,project_name:project,client_name:document.getElementById("p_client").value||null});
-    toast(`Pushed ${data.pushed} tasks to ${project} ✓`);
+    const data = await api("/api/moxie/tasks",{tasks:tasks.map(({title,project_name,client_name,deadline})=>({title,project_name,client_name,deadline}))});
+    let m=`Pushed ${data.pushed} task${data.pushed===1?"":"s"}`;
+    if(data.skipped&&data.skipped.length) m+=`, ${data.skipped.length} skipped (no project)`;
+    toast(m+" ✓");
   }catch(e){ if(e.message!=="auth") toast(e.message); }
   finally{ btn.disabled=false; btn.textContent="Push to Moxie"; }
 };
 
+// ---- Time: per-entry assign, push ----
+function renderEntries(data){
+  const out = document.getElementById("t_out");
+  const ready = !!data.moxie_configured;
+  const entries = data.entries || [];
+  if(!entries.length){ out.innerHTML="<span class='placeholder'>No entries found.</span>"; document.getElementById("t_actions").style.display="none"; return; }
+  out.innerHTML = entries.map(e=>`
+    <div class="entry" data-desc="${esc(e.description)}" data-min="${e.minutes}" data-date="${esc(e.date)}">
+      <div class="ehead"><span><strong>${esc(e.description)}</strong>${e.date?` · ${esc(e.date)}`:""}</span><span class="min">${e.minutes}m</span></div>
+      ${ready ? pickersHTML(e.client) : ""}
+    </div>`).join("");
+  document.getElementById("t_actions").style.display = "block";
+  const push=document.getElementById("t_push");
+  push.disabled = !ready; push.textContent = ready ? "Push to Moxie" : "Connect Moxie to push";
+}
+
+function collectEntries(){
+  return [...document.querySelectorAll("#t_out .entry")].map(row=>{
+    const cid = row.querySelector(".mx-client")?.value;
+    return {
+      description: row.dataset.desc,
+      minutes: parseInt(row.dataset.min,10)||0,
+      date: row.dataset.date || null,
+      client_name: cid ? (clientById(cid)?.name || null) : null,
+      project_name: row.querySelector(".mx-project")?.value || null,
+    };
+  });
+}
+
 document.getElementById("t_push").onclick = async ()=>{
   const btn=document.getElementById("t_push");
+  const entries = collectEntries();
+  if(!entries.length){ toast("Nothing to push"); return; }
   try{ btn.disabled=true; btn.textContent="Pushing…";
-    const data = await api("/api/moxie/time",{notes:document.getElementById("t_notes").value,commit:true});
-    toast(`Pushed ${data.results.length} entries to Moxie ✓`);
+    const data = await api("/api/moxie/time/commit",{entries});
+    toast(`Pushed ${data.pushed} time entr${data.pushed===1?"y":"ies"} to Moxie ✓`);
   }catch(e){ if(e.message!=="auth") toast(e.message); }
   finally{ btn.disabled=false; btn.textContent="Push to Moxie"; }
 };

@@ -54,23 +54,33 @@ class ReportIn(BaseModel):
     notes: str
 
 
-class TimeIn(BaseModel):
-    notes: str
-    commit: bool = False  # if true, push parsed entries to Moxie
-
-
-class TaskItem(BaseModel):
+# Per-item push: each task carries its own client + project (assigned in-app
+# from the live Moxie lists, so names match exactly).
+class PushTask(BaseModel):
     title: str
-    area: str | None = None
-    priority: str | None = None
+    project_name: str | None = None
+    client_name: str | None = None
     deadline: str | None = None
-    needs_from_client: str | None = None
 
 
 class TasksIn(BaseModel):
-    tasks: list[TaskItem]
-    project_name: str  # Moxie attaches tasks to a project by exact name
+    tasks: list[PushTask]
+
+
+class TimeNotesIn(BaseModel):
+    notes: str
+
+
+class TimeEntry(BaseModel):
+    description: str
+    minutes: int
+    date: str | None = None
     client_name: str | None = None
+    project_name: str | None = None
+
+
+class TimeCommitIn(BaseModel):
+    entries: list[TimeEntry]
 
 
 # ---- API ------------------------------------------------------------------
@@ -96,7 +106,7 @@ def priority(body: PriorityIn, x_app_key: str | None = Header(default=None)) -> 
 
 @app.get("/api/moxie/projects")
 def moxie_projects(x_app_key: str | None = Header(default=None)) -> dict:
-    """Live project list from Moxie, for the task-push picker."""
+    """Live project list (carries clientId so the UI can cascade client→project)."""
     _check_key(x_app_key)
     if not moxie.configured():
         raise HTTPException(status_code=501, detail="Moxie not connected.")
@@ -104,29 +114,43 @@ def moxie_projects(x_app_key: str | None = Header(default=None)) -> dict:
     return {"projects": projects}
 
 
+@app.get("/api/moxie/clients")
+def moxie_clients(x_app_key: str | None = Header(default=None)) -> dict:
+    """Live client list, for the per-item client picker."""
+    _check_key(x_app_key)
+    if not moxie.configured():
+        raise HTTPException(status_code=501, detail="Moxie not connected.")
+    return {"clients": moxie.list_clients()}
+
+
 @app.post("/api/moxie/tasks")
 def moxie_tasks(body: TasksIn, x_app_key: str | None = Header(default=None)) -> dict:
-    """Push (HITL-reviewed) tasks into Moxie. Defer state to Moxie — we store nothing."""
+    """Push (HITL-reviewed) tasks into Moxie, each to its assigned project.
+
+    Defer state to Moxie — we store nothing. Tasks without a project assigned are
+    skipped and reported, so a partial assignment never silently drops work.
+    """
     _check_key(x_app_key)
     if not body.tasks:
         raise HTTPException(status_code=400, detail="No tasks to push.")
-    if not body.project_name:
-        raise HTTPException(status_code=400, detail="Pick a project to add these tasks to.")
     if not moxie.configured():
         raise HTTPException(
             status_code=501,
             detail="Moxie not connected yet. Add MOXIE_BASE_URL + MOXIE_API_KEY to enable pushing.",
         )
-    results = []
+    results, skipped = [], []
     for t in body.tasks:
+        if not t.project_name:
+            skipped.append(t.title)
+            continue
         res = moxie.create_task(
             name=t.title,
-            project_name=body.project_name,
-            client_name=body.client_name,
+            project_name=t.project_name,
+            client_name=t.client_name,
             due_date=t.deadline,
         )
-        results.append({"task": t.title, "moxie": res})
-    return {"pushed": len(results), "results": results}
+        results.append({"task": t.title, "project": t.project_name, "moxie": res})
+    return {"pushed": len(results), "skipped": skipped, "results": results}
 
 
 @app.post("/api/report")
@@ -138,45 +162,52 @@ def report(body: ReportIn, x_app_key: str | None = Header(default=None)) -> dict
 
 
 @app.post("/api/moxie/time")
-def moxie_time(body: TimeIn, x_app_key: str | None = Header(default=None)) -> dict:
+def moxie_time(body: TimeNotesIn, x_app_key: str | None = Header(default=None)) -> dict:
+    """Preview: parse work notes into structured, per-entry billables."""
     _check_key(x_app_key)
     if not body.notes.strip():
         raise HTTPException(status_code=400, detail="Paste your work notes first.")
-
     entries = llm.parse_time_entries(body.notes)
+    return {"entries": entries, "moxie_configured": moxie.configured()}
 
-    # Preview-only by default. Pushing to Moxie is opt-in via commit=true.
-    if body.commit:
-        if not moxie.configured():
-            raise HTTPException(
-                status_code=501,
-                detail="Moxie not connected yet. Add MOXIE_BASE_URL + MOXIE_API_KEY to enable pushing.",
-            )
-        if not moxie.USER_EMAIL:
-            raise HTTPException(
-                status_code=501,
-                detail="Set MOXIE_USER_EMAIL — Moxie records time entries against a user.",
-            )
-        results = []
-        for e in entries:
-            # Moxie wants a timer start/end pair. We have minutes + an optional
-            # date, so synthesize a start (date @ 9am UTC) and end (+minutes).
-            day = e.get("date") or datetime.now(timezone.utc).strftime("%Y-%m-%d")
-            try:
-                start = datetime.fromisoformat(f"{day}T09:00:00+00:00")
-            except ValueError:
-                start = datetime.now(timezone.utc).replace(hour=9, minute=0, second=0, microsecond=0)
-            end = start + timedelta(minutes=int(e["minutes"]))
-            res = moxie.create_time_entry(
-                timer_start=start.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                timer_end=end.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                client_name=e.get("client"),
-                notes=e["description"],
-            )
-            results.append({"entry": e, "moxie": res})
-        return {"committed": True, "results": results}
 
-    return {"committed": False, "entries": entries, "moxie_configured": moxie.configured()}
+def _synth_timer(day: str | None, minutes: int) -> tuple[str, str]:
+    """Moxie wants a start/end pair; synthesize from a date (@9am UTC) + minutes."""
+    day = day or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    try:
+        start = datetime.fromisoformat(f"{day}T09:00:00+00:00")
+    except ValueError:
+        start = datetime.now(timezone.utc).replace(hour=9, minute=0, second=0, microsecond=0)
+    end = start + timedelta(minutes=int(minutes))
+    fmt = "%Y-%m-%dT%H:%M:%SZ"
+    return start.strftime(fmt), end.strftime(fmt)
+
+
+@app.post("/api/moxie/time/commit")
+def moxie_time_commit(body: TimeCommitIn, x_app_key: str | None = Header(default=None)) -> dict:
+    """Push per-item-assigned billables into Moxie."""
+    _check_key(x_app_key)
+    if not body.entries:
+        raise HTTPException(status_code=400, detail="No entries to push.")
+    if not moxie.configured():
+        raise HTTPException(status_code=501, detail="Moxie not connected.")
+    if not moxie.USER_EMAIL:
+        raise HTTPException(
+            status_code=501,
+            detail="Set MOXIE_USER_EMAIL — Moxie records time entries against a user.",
+        )
+    results = []
+    for e in body.entries:
+        start, end = _synth_timer(e.date, e.minutes)
+        res = moxie.create_time_entry(
+            timer_start=start,
+            timer_end=end,
+            client_name=e.client_name,
+            project_name=e.project_name,
+            notes=e.description,
+        )
+        results.append({"entry": e.description, "project": e.project_name, "moxie": res})
+    return {"pushed": len(results), "results": results}
 
 
 # ---- static UI (mounted last so /api/* wins) ------------------------------

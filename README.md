@@ -46,10 +46,17 @@ uvicorn app.main:app --reload
 |---|---|---|---|
 | GET | `/api/health` | — | status, model, moxie/key config |
 | POST | `/api/priority` | `{dump, client_name?}` | `{tasks, questions}` (structured, editable) |
-| GET | `/api/moxie/projects` | — | `{projects}` — live project list from Moxie |
-| POST | `/api/moxie/tasks` | `{tasks, project_name, client_name?}` | `{pushed, results}` — pushes HITL-reviewed tasks into the chosen Moxie project |
+| GET | `/api/moxie/clients` | — | `{clients}` — live client list |
+| GET | `/api/moxie/projects` | — | `{projects}` — live projects (carry `clientId` for cascade) |
+| POST | `/api/moxie/tasks` | `{tasks:[{title, project_name, client_name?, deadline?}]}` | `{pushed, skipped, results}` — each task to its assigned project |
 | POST | `/api/report` | `{notes}` | `{report}` (markdown) |
-| POST | `/api/moxie/time` | `{notes, commit?}` | parsed `{entries}`, or `{results}` if committed |
+| POST | `/api/moxie/time` | `{notes}` | `{entries}` — parsed billables (preview) |
+| POST | `/api/moxie/time/commit` | `{entries:[{description, minutes, date?, client_name?, project_name?}]}` | `{pushed, results}` |
+
+**Per-item assignment:** the UI loads live clients + projects and gives every task
+and billable its own **client → project** cascade picker (project list filters to
+the chosen client), pre-matched to the LLM's client guess. Names come straight
+from Moxie's lists, so the exact-name match Moxie requires is guaranteed.
 
 ## Design principle: defer state to the backend
 
