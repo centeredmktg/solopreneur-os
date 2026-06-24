@@ -52,6 +52,7 @@ class PriorityIn(BaseModel):
 
 class ReportIn(BaseModel):
     notes: str
+    client_name: str | None = None
 
 
 # Per-item push: each task carries its own client + project (assigned in-app
@@ -158,7 +159,7 @@ def report(body: ReportIn, x_app_key: str | None = Header(default=None)) -> dict
     _check_key(x_app_key)
     if not body.notes.strip():
         raise HTTPException(status_code=400, detail="Paste your notes for the client first.")
-    return {"report": llm.monthly_report(body.notes)}
+    return {"report": llm.monthly_report(body.notes, body.client_name)}
 
 
 @app.post("/api/moxie/time")
