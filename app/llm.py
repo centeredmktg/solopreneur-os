@@ -95,8 +95,9 @@ def parse_priority(dump: str, client_name: str | None = None) -> dict:
     return json.loads(text)
 
 
-def monthly_report(notes: str) -> str:
-    return _generate(prompts.MONTHLY_REPORT, notes, max_tokens=4000)
+def monthly_report(notes: str, client_name: str | None = None) -> str:
+    user = notes if not client_name else f"Client: {client_name}\n\n{notes}"
+    return _generate(prompts.MONTHLY_REPORT, user, max_tokens=4000)
 
 
 # Structured-output schema for the task->time parser. additionalProperties:false

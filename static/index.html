@@ -48,7 +48,7 @@ h1 em{font-style:italic}
 .panel.input{background:var(--surface-soft);border-right:1px solid #ececf7}
 @media(max-width:840px){.panel.input{border-right:none;border-bottom:1px solid #ececf7}}
 label{display:block;font-size:.76rem;letter-spacing:.14em;text-transform:uppercase;color:var(--slate-soft);margin-bottom:10px}
-input[type=text]{width:100%;font-family:var(--sans);font-size:.95rem;color:var(--ink);border:1px solid #e2e1f0;border-radius:var(--r-sm);padding:11px 14px;margin-bottom:14px;background:#fff}
+input[type=text],#p_client,#t_client,#r_client{width:100%;font-family:var(--sans);font-size:.95rem;color:var(--ink);border:1px solid #e2e1f0;border-radius:var(--r-sm);padding:11px 14px;margin-bottom:14px;background:#fff}
 textarea{width:100%;min-height:210px;resize:vertical;font-family:var(--sans);font-size:.97rem;color:var(--ink);line-height:1.6;border:1px solid #e2e1f0;border-radius:var(--r-md);padding:16px 18px;background:#fff;transition:.2s}
 textarea:focus,input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-tint)}
 .btn{font-family:var(--sans);font-weight:500;font-size:1rem;cursor:pointer;border:none;border-radius:var(--r-pill);padding:15px 32px;background:var(--accent);color:var(--ink);box-shadow:0 12px 28px -12px var(--accent-deep);transition:.2s;margin-top:16px}
@@ -115,8 +115,8 @@ footer em{font-family:var(--serif);font-style:italic}
     <div class="tool-head"><h2>Priority Engine</h2><p>Word vomit in. Organized, prioritized plan out.</p></div>
     <div class="grid">
       <div class="panel input">
-        <label>Client name (optional)</label>
-        <input type="text" id="p_client" placeholder="e.g. Habitat Modern">
+        <label>Client (optional)</label>
+        <select id="p_client"><option value="">All / unspecified</option></select>
         <label>The dump</label>
         <textarea id="p_dump" placeholder="Paste the client's messages here — any format, any channel..."></textarea>
         <button class="btn" data-run="priority">Organize it &nbsp;→</button>
@@ -142,6 +142,8 @@ footer em{font-family:var(--serif);font-style:italic}
     <div class="tool-head"><h2>Monthly Report</h2><p>Rough notes in. Client-ready recap out.</p></div>
     <div class="grid">
       <div class="panel input">
+        <label>Client</label>
+        <select id="r_client"><option value="">Select a client…</option></select>
         <label>This month's notes</label>
         <textarea id="r_notes" placeholder="Client: ...&#10;Plan: Momentum, used ~14 hrs&#10;- redid welcome packet in Canva&#10;- flagged the vendor double-bill, saved ~$400&#10;- waiting on approval of the new pricing sheet"></textarea>
         <button class="btn" data-run="report">Write the update &nbsp;→</button>
@@ -162,6 +164,8 @@ footer em{font-family:var(--serif);font-style:italic}
     <div class="tool-head"><h2>Task → Time</h2><p>Work notes in. Billable entries out.</p></div>
     <div class="grid">
       <div class="panel input">
+        <label>Client (optional)</label>
+        <select id="t_client"><option value="">All / unspecified</option></select>
         <label>What you worked on</label>
         <textarea id="t_notes" placeholder="Cleared Holly's inbox daily, ~3 hrs total&#10;Spent 45 min on the new client onboarding for Kate&#10;Designed 2 Canva graphics, about an hour&#10;Reconciled invoices Tuesday, 30 min"></textarea>
         <div class="row">
@@ -181,7 +185,7 @@ footer em{font-family:var(--serif);font-style:italic}
 <script>
 const KEY_STORE = "solopreneur_app_key";
 function appKey(){ return localStorage.getItem(KEY_STORE) || ""; }
-function setKey(){ const k = prompt("Enter your app key:", appKey()); if(k!==null) localStorage.setItem(KEY_STORE,k.trim()); }
+function setKey(){ const k = prompt("Enter your app key:", appKey()); if(k!==null){ localStorage.setItem(KEY_STORE,k.trim()); MX.loaded=false; loadMoxie().then(fillClientDropdown); } }
 document.getElementById("settingsBtn").onclick = setKey;
 
 function toast(msg){ const t=document.getElementById("toast"); t.textContent=msg; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),2600); }
@@ -228,6 +232,18 @@ async function loadMoxie(){
   ]);
   MX.clients=c.clients||[]; MX.projects=p.projects||[]; MX.loaded=true; return MX;
 }
+function fillClientDropdown(){
+  if(!MX.clients.length) return;
+  const opts = MX.clients.map(c=>`<option value="${esc(c.name)}">${esc(c.name)}</option>`).join("");
+  // p_client/t_client allow "unspecified"; r_client (a report is always for one client) does not.
+  const placeholders = {p_client:"All / unspecified", t_client:"All / unspecified", r_client:"Select a client…"};
+  for(const [id,ph] of Object.entries(placeholders)){
+    const sel=document.getElementById(id); if(!sel) continue;
+    const cur=sel.value;
+    sel.innerHTML=`<option value="">${ph}</option>`+opts;
+    sel.value=cur;
+  }
+}
 const clientById = id => MX.clients.find(c=>c.id===id);
 const projectsForClient = id => MX.projects.filter(p=>p.clientId===id);
 function matchClient(name){
@@ -268,7 +284,7 @@ document.querySelectorAll("[data-run]").forEach(btn=>{
         renderPriority(data);
       } else if(kind==="report"){
         const out=document.getElementById("r_out");
-        const data = await api("/api/report",{notes:document.getElementById("r_notes").value});
+        const data = await api("/api/report",{notes:document.getElementById("r_notes").value,client_name:document.getElementById("r_client").value||null});
         out.innerHTML = md(data.report); document.getElementById("r_actions").style.display="block";
       } else if(kind==="time"){
         const data = await api("/api/moxie/time",{notes:document.getElementById("t_notes").value});
@@ -363,7 +379,7 @@ function renderEntries(data){
   out.innerHTML = entries.map(e=>`
     <div class="entry" data-desc="${esc(e.description)}" data-min="${e.minutes}" data-date="${esc(e.date)}">
       <div class="ehead"><span><strong>${esc(e.description)}</strong>${e.date?` · ${esc(e.date)}`:""}</span><span class="min">${e.minutes}m</span></div>
-      ${ready ? pickersHTML(e.client) : ""}
+      ${ready ? pickersHTML(e.client || document.getElementById("t_client").value) : ""}
     </div>`).join("");
   document.getElementById("t_actions").style.display = "block";
   const push=document.getElementById("t_push");
@@ -397,6 +413,9 @@ document.getElementById("t_push").onclick = async ()=>{
 document.querySelectorAll(".copy").forEach(b=>{
   b.onclick = ()=>{ const el=document.getElementById(b.dataset.copy); navigator.clipboard.writeText(el.innerText); toast("Copied"); };
 });
+
+// Populate the client dropdown from live Moxie data on load (needs app key set).
+loadMoxie().then(fillClientDropdown);
 </script>
 </body>
 </html>
