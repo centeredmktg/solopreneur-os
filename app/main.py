@@ -13,8 +13,13 @@ from __future__ import annotations
 
 import os
 
-from fastapi import FastAPI, Header, HTTPException
-from fastapi.responses import FileResponse
+from dotenv import load_dotenv
+
+load_dotenv()  # local dev: read .env. No-op on Railway (real env vars set).
+
+import anthropic
+from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -24,6 +29,13 @@ APP_KEY = os.environ.get("APP_KEY", "")
 STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static")
 
 app = FastAPI(title="Solopreneur OS")
+
+
+@app.exception_handler(anthropic.APIStatusError)
+async def _anthropic_error(request: Request, exc: anthropic.APIStatusError) -> JSONResponse:
+    # Surface a clean message instead of a raw 500 (e.g. low balance, rate limit).
+    msg = getattr(exc, "message", str(exc))
+    return JSONResponse(status_code=502, content={"detail": f"AI service error: {msg}"})
 
 
 def _check_key(x_app_key: str | None) -> None:

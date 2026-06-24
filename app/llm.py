@@ -16,7 +16,8 @@ import anthropic
 
 from . import prompts
 
-MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-6")
+# `or` (not a default arg) so an empty CLAUDE_MODEL= in .env falls back too.
+MODEL = os.environ.get("CLAUDE_MODEL") or "claude-sonnet-4-6"
 
 _client: anthropic.Anthropic | None = None
 
