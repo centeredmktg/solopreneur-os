@@ -58,6 +58,19 @@ class TimeIn(BaseModel):
     commit: bool = False  # if true, push parsed entries to Moxie
 
 
+class TaskItem(BaseModel):
+    title: str
+    area: str | None = None
+    priority: str | None = None
+    deadline: str | None = None
+    needs_from_client: str | None = None
+
+
+class TasksIn(BaseModel):
+    tasks: list[TaskItem]
+    client_name: str | None = None
+
+
 # ---- API ------------------------------------------------------------------
 @app.get("/api/health")
 def health() -> dict:
@@ -74,7 +87,27 @@ def priority(body: PriorityIn, x_app_key: str | None = Header(default=None)) -> 
     _check_key(x_app_key)
     if not body.dump.strip():
         raise HTTPException(status_code=400, detail="Paste the client's messages first.")
-    return {"plan": llm.priority_plan(body.dump, body.client_name)}
+    result = llm.parse_priority(body.dump, body.client_name)
+    result["moxie_configured"] = moxie.configured()
+    return result
+
+
+@app.post("/api/moxie/tasks")
+def moxie_tasks(body: TasksIn, x_app_key: str | None = Header(default=None)) -> dict:
+    """Push (HITL-reviewed) tasks into Moxie. Defer state to Moxie — we store nothing."""
+    _check_key(x_app_key)
+    if not body.tasks:
+        raise HTTPException(status_code=400, detail="No tasks to push.")
+    if not moxie.configured():
+        raise HTTPException(
+            status_code=501,
+            detail="Moxie not connected yet. Add MOXIE_BASE_URL + MOXIE_API_KEY to enable pushing.",
+        )
+    results = []
+    for t in body.tasks:
+        res = moxie.create_task(t.title, t.priority, t.deadline, body.client_name)
+        results.append({"task": t.title, "moxie": res})
+    return {"pushed": len(results), "results": results}
 
 
 @app.post("/api/report")

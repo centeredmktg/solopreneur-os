@@ -63,6 +63,23 @@ textarea:focus,input:focus{outline:none;border-color:var(--accent);box-shadow:0 
 .out-actions{margin-top:16px;display:none}
 .entry{display:flex;justify-content:space-between;gap:12px;padding:11px 15px;border-radius:var(--r-sm);background:var(--surface-soft);margin-bottom:8px;font-size:.93rem}
 .entry .min{color:var(--accent-deep);font-weight:600;white-space:nowrap}
+.pgroup{margin-bottom:16px}
+.pgroup-title{display:flex;align-items:center;gap:9px;font-weight:600;font-size:.9rem;color:var(--ink);margin-bottom:9px}
+.dot{width:10px;height:10px;border-radius:50%}
+.dot.now{background:var(--now)}.dot.next{background:var(--next)}.dot.later{background:var(--later)}
+.task-row{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:var(--r-sm);margin-bottom:6px;border:1px solid #ececf7;background:#fff}
+.task-row.now{background:var(--now-tint);border-color:transparent}
+.task-row.next{background:var(--next-tint);border-color:transparent}
+.task-row.later{background:var(--later-tint);border-color:transparent}
+.task-row input.t-title{flex:1;border:none;background:transparent;font-family:var(--sans);font-size:.92rem;color:var(--ink);padding:3px 4px}
+.task-row input.t-title:focus{outline:none;background:#fff;border-radius:6px}
+.task-row select{font-family:var(--sans);font-size:.78rem;border:1px solid rgba(25,23,54,.12);border-radius:var(--r-pill);padding:3px 8px;background:#fff;color:var(--slate)}
+.task-row .flag{font-size:.72rem;color:var(--now);background:#fff;padding:2px 7px;border-radius:var(--r-pill);white-space:nowrap}
+.task-row .rm{cursor:pointer;color:var(--slate-soft);border:none;background:none;font-size:1rem;line-height:1;padding:2px 4px}
+.task-row .rm:hover{color:var(--now)}
+.qbox{margin-top:6px;padding:10px 14px;border-radius:var(--r-sm);background:var(--surface-soft);font-size:.9rem}
+.qbox strong{color:var(--ink)}
+.actions-2{display:flex;gap:10px;flex-wrap:wrap}
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:12px 22px;border-radius:var(--r-pill);font-size:.9rem;opacity:0;transition:.3s;pointer-events:none}
 .toast.show{opacity:1}
 footer{padding:28px 0 50px;text-align:center;color:var(--slate-soft);font-size:.84rem}
@@ -98,8 +115,11 @@ footer em{font-family:var(--serif);font-style:italic}
         <textarea id="p_dump" placeholder="Paste the client's messages here — any format, any channel..."></textarea>
         <button class="btn" data-run="priority">Organize it &nbsp;→</button>
       </div>
-      <div class="panel"><div class="out" id="p_out"><span class="placeholder">Your sorted plan will appear here.</span></div>
-        <div class="out-actions" id="p_actions"><button class="btn ghost copy" data-copy="p_out">Copy</button></div>
+      <div class="panel"><div class="out" id="p_out"><span class="placeholder">Your sorted, editable plan will appear here.</span></div>
+        <div class="out-actions actions-2" id="p_actions">
+          <button class="btn ghost" id="p_copy">Copy as message</button>
+          <button class="btn ghost" id="p_push">Push to Moxie</button>
+        </div>
       </div>
     </div>
   </section>
@@ -192,9 +212,8 @@ document.querySelectorAll("[data-run]").forEach(btn=>{
     try{
       runState(btn,true);
       if(kind==="priority"){
-        const out=document.getElementById("p_out");
         const data = await api("/api/priority",{dump:document.getElementById("p_dump").value,client_name:document.getElementById("p_client").value||null});
-        out.innerHTML = md(data.plan); document.getElementById("p_actions").style.display="block";
+        renderPriority(data);
       } else if(kind==="report"){
         const out=document.getElementById("r_out");
         const data = await api("/api/report",{notes:document.getElementById("r_notes").value});
@@ -215,6 +234,79 @@ document.querySelectorAll("[data-run]").forEach(btn=>{
     finally{ runState(btn,false); }
   };
 });
+
+// ---- Priority Engine: structured, editable, push-to-Moxie ----
+const PRI = {now:"Now · this week",next:"Next · this month",later:"Later · parking lot"};
+let priorityMoxieReady = false;
+
+function renderPriority(data){
+  const out = document.getElementById("p_out");
+  priorityMoxieReady = !!data.moxie_configured;
+  const tasks = data.tasks || [];
+  if(!tasks.length){ out.innerHTML = "<span class='placeholder'>No tasks found in that dump.</span>"; document.getElementById("p_actions").style.display="none"; return; }
+
+  let html = "";
+  for(const p of ["now","next","later"]){
+    const group = tasks.filter(t=>t.priority===p);
+    if(!group.length) continue;
+    html += `<div class="pgroup"><div class="pgroup-title"><span class="dot ${p}"></span>${PRI[p]}</div>`;
+    for(const t of tasks){
+      if(t.priority!==p) continue;
+      const flag = t.needs_from_client ? `<span class="flag" title="needs from client">⚠ ${t.needs_from_client}</span>` : "";
+      html += `<div class="task-row ${p}" data-area="${t.area||""}">
+        <input class="t-title" value="${(t.title||"").replace(/"/g,'&quot;')}">
+        <select class="t-pri">
+          <option value="now"${p==="now"?" selected":""}>Now</option>
+          <option value="next"${p==="next"?" selected":""}>Next</option>
+          <option value="later"${p==="later"?" selected":""}>Later</option>
+        </select>${flag}
+        <button class="rm" title="remove">✕</button>
+      </div>`;
+    }
+    html += `</div>`;
+  }
+  if((data.questions||[]).length){
+    html += `<div class="qbox"><strong>Quick questions before I run with these:</strong><br>` +
+      data.questions.map(q=>"• "+q).join("<br>") + `</div>`;
+  }
+  out.innerHTML = html;
+  out.querySelectorAll(".rm").forEach(b=>b.onclick=()=>b.closest(".task-row").remove());
+  document.getElementById("p_actions").style.display="flex";
+  const push = document.getElementById("p_push");
+  push.disabled = !priorityMoxieReady;
+  push.textContent = priorityMoxieReady ? "Push to Moxie" : "Connect Moxie to push";
+}
+
+function collectTasks(){
+  return [...document.querySelectorAll("#p_out .task-row")].map(row=>({
+    title: row.querySelector(".t-title").value.trim(),
+    priority: row.querySelector(".t-pri").value,
+    area: row.dataset.area || null,
+  })).filter(t=>t.title);
+}
+
+document.getElementById("p_copy").onclick = ()=>{
+  const tasks = collectTasks();
+  const client = document.getElementById("p_client").value || "your week";
+  let msg = `Here's how I'm organizing this — ${client}\n`;
+  for(const p of ["now","next","later"]){
+    const g = tasks.filter(t=>t.priority===p);
+    if(!g.length) continue;
+    msg += `\n${PRI[p]}\n` + g.map(t=>`• ${t.title}`).join("\n") + "\n";
+  }
+  navigator.clipboard.writeText(msg.trim()); toast("Copied as message");
+};
+
+document.getElementById("p_push").onclick = async ()=>{
+  const btn=document.getElementById("p_push");
+  const tasks = collectTasks();
+  if(!tasks.length){ toast("Nothing to push"); return; }
+  try{ btn.disabled=true; btn.textContent="Pushing…";
+    const data = await api("/api/moxie/tasks",{tasks,client_name:document.getElementById("p_client").value||null});
+    toast(`Pushed ${data.pushed} tasks to Moxie ✓`);
+  }catch(e){ if(e.message!=="auth") toast(e.message); }
+  finally{ btn.disabled=false; btn.textContent="Push to Moxie"; }
+};
 
 document.getElementById("t_push").onclick = async ()=>{
   const btn=document.getElementById("t_push");

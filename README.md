@@ -45,9 +45,18 @@ uvicorn app.main:app --reload
 | Method | Path | Body | Returns |
 |---|---|---|---|
 | GET | `/api/health` | — | status, model, moxie/key config |
-| POST | `/api/priority` | `{dump, client_name?}` | `{plan}` (markdown) |
+| POST | `/api/priority` | `{dump, client_name?}` | `{tasks, questions}` (structured, editable) |
+| POST | `/api/moxie/tasks` | `{tasks, client_name?}` | `{pushed, results}` — pushes HITL-reviewed tasks to Moxie |
 | POST | `/api/report` | `{notes}` | `{report}` (markdown) |
 | POST | `/api/moxie/time` | `{notes, commit?}` | parsed `{entries}`, or `{results}` if committed |
+
+## Design principle: defer state to the backend
+
+The app stores **nothing**. Moxie is the system of record for tasks, projects,
+and time. The Priority Engine extracts a structured task set you review and edit
+(HITL), then **pushes into Moxie** — it does not persist a parallel task store.
+This is the wedge: a nicer AI front door over tools the user already owns. Future
+backends (HubSpot, GoHighLevel, Asana) slot in as new adapter modules + routes.
 
 All `/api/*` calls require the `X-App-Key` header when `APP_KEY` is set.
 
