@@ -185,6 +185,19 @@ footer em{font-family:var(--serif);font-style:italic}
 <script>
 const KEY_STORE = "solopreneur_app_key";
 function appKey(){ return localStorage.getItem(KEY_STORE) || ""; }
+
+// Shareable link: a "#k=<app key>" fragment (preferred — never sent to the
+// server, so it stays out of access logs) or "?k=" query sets the key once,
+// then gets stripped from the URL so it isn't left in the address bar/history.
+(function(){
+  const k = (new URLSearchParams(location.hash.slice(1)).get("k"))
+         || (new URLSearchParams(location.search).get("k"));
+  if(k){
+    localStorage.setItem(KEY_STORE, k.trim());
+    const q = new URLSearchParams(location.search); q.delete("k");
+    history.replaceState({}, "", location.pathname + (q.toString() ? "?"+q.toString() : ""));
+  }
+})();
 function setKey(){ const k = prompt("Enter your app key:", appKey()); if(k!==null){ localStorage.setItem(KEY_STORE,k.trim()); MX.loaded=false; loadMoxie().then(fillClientDropdown); } }
 document.getElementById("settingsBtn").onclick = setKey;
 
