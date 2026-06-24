@@ -46,7 +46,8 @@ uvicorn app.main:app --reload
 |---|---|---|---|
 | GET | `/api/health` | — | status, model, moxie/key config |
 | POST | `/api/priority` | `{dump, client_name?}` | `{tasks, questions}` (structured, editable) |
-| POST | `/api/moxie/tasks` | `{tasks, client_name?}` | `{pushed, results}` — pushes HITL-reviewed tasks to Moxie |
+| GET | `/api/moxie/projects` | — | `{projects}` — live project list from Moxie |
+| POST | `/api/moxie/tasks` | `{tasks, project_name, client_name?}` | `{pushed, results}` — pushes HITL-reviewed tasks into the chosen Moxie project |
 | POST | `/api/report` | `{notes}` | `{report}` (markdown) |
 | POST | `/api/moxie/time` | `{notes, commit?}` | parsed `{entries}`, or `{results}` if committed |
 

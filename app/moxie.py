@@ -1,16 +1,18 @@
-"""Moxie (withmoxie.com) Public API client — Task -> Time billing.
+"""Moxie (withmoxie.com) Public API client.
 
 Auth: X-API-KEY header. Base URL is per-workspace ("pod"), e.g.
-https://pod00.withmoxie.dev  (the value Moxie shows under
-Workspace Settings -> Connected Apps -> Integrations -> Enable Custom Integration).
-Rate limit: 100 requests / 5 min.
+https://pod01.withmoxie.com/api/public  (Workspace Settings -> Connected Apps ->
+Integrations -> Enable Custom Integration). Rate limit: 100 requests / 5 min.
 
-NOTE: the exact Create Time Entry path + field names render on the workspace's
-own "Public API Endpoints & JSON Payloads" page once the integration is enabled.
-Confirm against the live docs (or the community MCP server,
-github.com/flyingwebie/withmoxie-mcp-server) before relying on this in prod.
-The endpoint path is configurable via MOXIE_TIME_ENTRY_PATH so we can correct it
-without a code change.
+Endpoint paths verified live against a real workspace (2026-06-23) and
+cross-checked with github.com/flyingwebie/withmoxie-mcp-server. All operations
+sit under the `/action/` namespace:
+  GET  /action/projects/search   list/search projects
+  GET  /action/clients/list      list clients
+  POST /action/tasks/create      create a task in a project (by project NAME)
+  POST /action/timeWorked/create create a time entry (timerStart/End + userEmail)
+
+We store nothing — Moxie is the system of record.
 """
 from __future__ import annotations
 
@@ -20,52 +22,100 @@ import httpx
 
 BASE_URL = os.environ.get("MOXIE_BASE_URL", "").rstrip("/")
 API_KEY = os.environ.get("MOXIE_API_KEY", "")
-# Default to the documented public-API namespace; override once verified against
-# the workspace's live "Public API Endpoints & JSON Payloads" page.
-TIME_ENTRY_PATH = os.environ.get("MOXIE_TIME_ENTRY_PATH", "/api/public/timeentries/create")
-TASK_PATH = os.environ.get("MOXIE_TASK_PATH", "/api/public/tasks/create")
+USER_EMAIL = os.environ.get("MOXIE_USER_EMAIL", "")  # owner of time entries
 
 
 def configured() -> bool:
     return bool(BASE_URL and API_KEY)
 
 
-def _post(path: str, payload: dict) -> dict:
+def _get(path: str, params: dict | None = None):
     if not configured():
         raise RuntimeError("Moxie not configured: set MOXIE_BASE_URL and MOXIE_API_KEY.")
-    resp = httpx.post(
+    r = httpx.get(f"{BASE_URL}{path}", headers={"X-API-KEY": API_KEY}, params=params, timeout=30.0)
+    r.raise_for_status()
+    return r.json()
+
+
+def _post(path: str, body: dict) -> dict:
+    if not configured():
+        raise RuntimeError("Moxie not configured: set MOXIE_BASE_URL and MOXIE_API_KEY.")
+    r = httpx.post(
         f"{BASE_URL}{path}",
         headers={"X-API-KEY": API_KEY, "Content-Type": "application/json"},
-        json=payload,
+        json=body,
         timeout=30.0,
     )
-    resp.raise_for_status()
-    return resp.json()
+    r.raise_for_status()
+    return r.json()
 
 
-def create_time_entry(description: str, minutes: int, client: str | None, date: str | None) -> dict:
-    """Create a single time entry in Moxie. Returns the API response JSON."""
-    payload: dict = {"description": description, "minutes": minutes}
-    if client:
-        payload["client"] = client
-    if date:
-        payload["date"] = date
-    return _post(TIME_ENTRY_PATH, payload)
+# ---- reads ----------------------------------------------------------------
+def list_projects() -> list[dict]:
+    """Live project list, trimmed to what the UI needs."""
+    data = _get("/action/projects/search")
+    return [
+        {
+            "id": p.get("id"),
+            "name": p.get("name"),
+            "clientId": p.get("clientId"),
+            "active": p.get("active", True),
+            "dueDate": p.get("dueDate"),
+        }
+        for p in (data or [])
+    ]
 
 
-def create_task(title: str, priority: str | None, deadline: str | None, client: str | None) -> dict:
-    """Create a single task in Moxie. Returns the API response JSON.
+def list_clients() -> list[dict]:
+    data = _get("/action/clients/list")
+    return [{"id": c.get("id"), "name": c.get("name")} for c in (data or [])]
 
-    NOTE: Moxie tasks live under projects; the exact required fields (e.g. a
-    project_id, status mapping) render on the workspace's live API-payloads page.
-    Confirm and adjust this payload before relying on it in prod. Field names here
-    are a best-effort default and the path is overridable via MOXIE_TASK_PATH.
-    """
-    payload: dict = {"name": title}
-    if priority:
-        payload["priority"] = priority
-    if deadline:
-        payload["due_date"] = deadline
-    if client:
-        payload["client"] = client
-    return _post(TASK_PATH, payload)
+
+# ---- writes ---------------------------------------------------------------
+def create_task(
+    name: str,
+    project_name: str,
+    client_name: str | None = None,
+    due_date: str | None = None,
+    status: str | None = None,
+    priority: int | None = None,
+    description: str | None = None,
+) -> dict:
+    """Create a task in a project. Tasks attach to a project by exact NAME."""
+    body: dict = {"name": name, "projectName": project_name}
+    if client_name:
+        body["clientName"] = client_name
+    if description:
+        body["description"] = description
+    if due_date:
+        body["dueDate"] = due_date
+    if status:
+        body["status"] = status
+    if priority is not None:
+        body["priority"] = priority
+    return _post("/action/tasks/create", body)
+
+
+def create_time_entry(
+    timer_start: str,
+    timer_end: str,
+    project_name: str | None = None,
+    client_name: str | None = None,
+    deliverable_name: str | None = None,
+    notes: str | None = None,
+    user_email: str | None = None,
+) -> dict:
+    """Create a time entry. Moxie tracks time as a start/end pair owned by a user."""
+    email = user_email or USER_EMAIL
+    if not email:
+        raise RuntimeError("Set MOXIE_USER_EMAIL to record time entries.")
+    body: dict = {"timerStart": timer_start, "timerEnd": timer_end, "userEmail": email}
+    if project_name:
+        body["projectName"] = project_name
+    if client_name:
+        body["clientName"] = client_name
+    if deliverable_name:
+        body["deliverableName"] = deliverable_name
+    if notes:
+        body["notes"] = notes
+    return _post("/action/timeWorked/create", body)

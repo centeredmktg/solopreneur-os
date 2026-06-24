@@ -80,6 +80,8 @@ textarea:focus,input:focus{outline:none;border-color:var(--accent);box-shadow:0 
 .qbox{margin-top:6px;padding:10px 14px;border-radius:var(--r-sm);background:var(--surface-soft);font-size:.9rem}
 .qbox strong{color:var(--ink)}
 .actions-2{display:flex;gap:10px;flex-wrap:wrap}
+.proj-select{width:100%;font-family:var(--sans);font-size:.9rem;color:var(--ink);border:1px solid #e2e1f0;border-radius:var(--r-pill);padding:10px 14px;margin-bottom:10px;background:#fff}
+.proj-select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-tint)}
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:12px 22px;border-radius:var(--r-pill);font-size:.9rem;opacity:0;transition:.3s;pointer-events:none}
 .toast.show{opacity:1}
 footer{padding:28px 0 50px;text-align:center;color:var(--slate-soft);font-size:.84rem}
@@ -116,9 +118,12 @@ footer em{font-family:var(--serif);font-style:italic}
         <button class="btn" data-run="priority">Organize it &nbsp;→</button>
       </div>
       <div class="panel"><div class="out" id="p_out"><span class="placeholder">Your sorted, editable plan will appear here.</span></div>
-        <div class="out-actions actions-2" id="p_actions">
-          <button class="btn ghost" id="p_copy">Copy as message</button>
-          <button class="btn ghost" id="p_push">Push to Moxie</button>
+        <div class="out-actions" id="p_actions">
+          <select id="p_project" class="proj-select"><option value="">Loading projects…</option></select>
+          <div class="actions-2">
+            <button class="btn ghost" id="p_copy">Copy as message</button>
+            <button class="btn ghost" id="p_push">Push to Moxie</button>
+          </div>
         </div>
       </div>
     </div>
@@ -271,10 +276,27 @@ function renderPriority(data){
   }
   out.innerHTML = html;
   out.querySelectorAll(".rm").forEach(b=>b.onclick=()=>b.closest(".task-row").remove());
-  document.getElementById("p_actions").style.display="flex";
+  document.getElementById("p_actions").style.display="block";
   const push = document.getElementById("p_push");
+  const sel = document.getElementById("p_project");
   push.disabled = !priorityMoxieReady;
   push.textContent = priorityMoxieReady ? "Push to Moxie" : "Connect Moxie to push";
+  sel.style.display = priorityMoxieReady ? "block" : "none";
+  if(priorityMoxieReady) loadProjects();
+}
+
+let projectsLoaded = false;
+async function loadProjects(){
+  if(projectsLoaded) return;
+  const sel = document.getElementById("p_project");
+  try{
+    const r = await fetch("/api/moxie/projects",{headers:{"X-App-Key":appKey()}});
+    if(!r.ok) throw new Error();
+    const {projects} = await r.json();
+    sel.innerHTML = `<option value="">Select a project…</option>` +
+      projects.map(p=>`<option value="${(p.name||"").replace(/"/g,'&quot;')}">${p.name}</option>`).join("");
+    projectsLoaded = true;
+  }catch(e){ sel.innerHTML = `<option value="">Couldn't load projects</option>`; }
 }
 
 function collectTasks(){
@@ -301,9 +323,11 @@ document.getElementById("p_push").onclick = async ()=>{
   const btn=document.getElementById("p_push");
   const tasks = collectTasks();
   if(!tasks.length){ toast("Nothing to push"); return; }
+  const project = document.getElementById("p_project").value;
+  if(!project){ toast("Pick a project first"); return; }
   try{ btn.disabled=true; btn.textContent="Pushing…";
-    const data = await api("/api/moxie/tasks",{tasks,client_name:document.getElementById("p_client").value||null});
-    toast(`Pushed ${data.pushed} tasks to Moxie ✓`);
+    const data = await api("/api/moxie/tasks",{tasks,project_name:project,client_name:document.getElementById("p_client").value||null});
+    toast(`Pushed ${data.pushed} tasks to ${project} ✓`);
   }catch(e){ if(e.message!=="auth") toast(e.message); }
   finally{ btn.disabled=false; btn.textContent="Push to Moxie"; }
 };
