@@ -12,6 +12,7 @@ Anthropic bill. Leave APP_KEY unset only for local dev.
 from __future__ import annotations
 
 import os
+from datetime import datetime, timedelta, timezone
 
 from dotenv import load_dotenv
 
@@ -68,6 +69,7 @@ class TaskItem(BaseModel):
 
 class TasksIn(BaseModel):
     tasks: list[TaskItem]
+    project_name: str  # Moxie attaches tasks to a project by exact name
     client_name: str | None = None
 
 
@@ -92,12 +94,24 @@ def priority(body: PriorityIn, x_app_key: str | None = Header(default=None)) -> 
     return result
 
 
+@app.get("/api/moxie/projects")
+def moxie_projects(x_app_key: str | None = Header(default=None)) -> dict:
+    """Live project list from Moxie, for the task-push picker."""
+    _check_key(x_app_key)
+    if not moxie.configured():
+        raise HTTPException(status_code=501, detail="Moxie not connected.")
+    projects = [p for p in moxie.list_projects() if p.get("active", True)]
+    return {"projects": projects}
+
+
 @app.post("/api/moxie/tasks")
 def moxie_tasks(body: TasksIn, x_app_key: str | None = Header(default=None)) -> dict:
     """Push (HITL-reviewed) tasks into Moxie. Defer state to Moxie — we store nothing."""
     _check_key(x_app_key)
     if not body.tasks:
         raise HTTPException(status_code=400, detail="No tasks to push.")
+    if not body.project_name:
+        raise HTTPException(status_code=400, detail="Pick a project to add these tasks to.")
     if not moxie.configured():
         raise HTTPException(
             status_code=501,
@@ -105,7 +119,12 @@ def moxie_tasks(body: TasksIn, x_app_key: str | None = Header(default=None)) -> 
         )
     results = []
     for t in body.tasks:
-        res = moxie.create_task(t.title, t.priority, t.deadline, body.client_name)
+        res = moxie.create_task(
+            name=t.title,
+            project_name=body.project_name,
+            client_name=body.client_name,
+            due_date=t.deadline,
+        )
         results.append({"task": t.title, "moxie": res})
     return {"pushed": len(results), "results": results}
 
@@ -126,18 +145,33 @@ def moxie_time(body: TimeIn, x_app_key: str | None = Header(default=None)) -> di
 
     entries = llm.parse_time_entries(body.notes)
 
-    # Preview-only by default. Pushing to Moxie is opt-in via commit=true and
-    # requires the Moxie integration to be configured.
+    # Preview-only by default. Pushing to Moxie is opt-in via commit=true.
     if body.commit:
         if not moxie.configured():
             raise HTTPException(
                 status_code=501,
                 detail="Moxie not connected yet. Add MOXIE_BASE_URL + MOXIE_API_KEY to enable pushing.",
             )
+        if not moxie.USER_EMAIL:
+            raise HTTPException(
+                status_code=501,
+                detail="Set MOXIE_USER_EMAIL — Moxie records time entries against a user.",
+            )
         results = []
         for e in entries:
+            # Moxie wants a timer start/end pair. We have minutes + an optional
+            # date, so synthesize a start (date @ 9am UTC) and end (+minutes).
+            day = e.get("date") or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            try:
+                start = datetime.fromisoformat(f"{day}T09:00:00+00:00")
+            except ValueError:
+                start = datetime.now(timezone.utc).replace(hour=9, minute=0, second=0, microsecond=0)
+            end = start + timedelta(minutes=int(e["minutes"]))
             res = moxie.create_time_entry(
-                e["description"], int(e["minutes"]), e.get("client"), e.get("date")
+                timer_start=start.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                timer_end=end.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                client_name=e.get("client"),
+                notes=e["description"],
             )
             results.append({"entry": e, "moxie": res})
         return {"committed": True, "results": results}
