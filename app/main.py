@@ -20,14 +20,24 @@ load_dotenv()  # local dev: read .env. No-op on Railway (real env vars set).
 
 import anthropic
 from fastapi import FastAPI, Header, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import llm, moxie
 
 APP_KEY = os.environ.get("APP_KEY", "")
+# Per-instance brand (build-once, brand-per-deploy). Defaults to the product name.
+BRAND = os.environ.get("APP_BRAND") or "Solopreneur OS"
 STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static")
+
+
+def _wordmark(brand: str) -> str:
+    """Render the brand with its last word italicized, e.g. Sonya <em>OS</em>."""
+    parts = brand.split()
+    if len(parts) > 1:
+        return " ".join(parts[:-1]) + f" <em>{parts[-1]}</em>"
+    return f"<em>{brand}</em>"
 
 app = FastAPI(title="Solopreneur OS")
 
@@ -213,8 +223,11 @@ def moxie_time_commit(body: TimeCommitIn, x_app_key: str | None = Header(default
 
 # ---- static UI (mounted last so /api/* wins) ------------------------------
 @app.get("/")
-def index() -> FileResponse:
-    return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+def index() -> HTMLResponse:
+    with open(os.path.join(STATIC_DIR, "index.html")) as f:
+        html = f.read()
+    html = html.replace("{{BRAND}}", BRAND).replace("{{WORDMARK}}", _wordmark(BRAND))
+    return HTMLResponse(html)
 
 
 app.mount("/", StaticFiles(directory=STATIC_DIR), name="static")
