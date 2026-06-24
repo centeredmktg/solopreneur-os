@@ -47,9 +47,52 @@ def _generate(system_prompt: str, user_text: str, max_tokens: int = 4000) -> str
     return "".join(b.text for b in resp.content if b.type == "text").strip()
 
 
-def priority_plan(dump: str, client_name: str | None = None) -> str:
+_PRIORITY_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "tasks": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string"},
+                    "area": {
+                        "type": "string",
+                        "enum": ["Administrative", "Business Operations", "Creative + Design"],
+                    },
+                    "priority": {"type": "string", "enum": ["now", "next", "later"]},
+                    "deadline": {"type": ["string", "null"]},
+                    "needs_from_client": {"type": ["string", "null"]},
+                },
+                "required": ["title", "area", "priority", "deadline", "needs_from_client"],
+                "additionalProperties": False,
+            },
+        },
+        "questions": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": ["tasks", "questions"],
+    "additionalProperties": False,
+}
+
+
+def parse_priority(dump: str, client_name: str | None = None) -> dict:
+    """Extract a structured, editable task set from a client's word-vomit."""
     user = dump if not client_name else f"Client: {client_name}\n\n{dump}"
-    return _generate(prompts.PRIORITY_ENGINE, user)
+    resp = _get_client().messages.create(
+        model=MODEL,
+        max_tokens=3000,
+        system=[
+            {
+                "type": "text",
+                "text": prompts.PRIORITY_ENGINE,
+                "cache_control": {"type": "ephemeral"},
+            }
+        ],
+        messages=[{"role": "user", "content": user}],
+        output_config={"format": {"type": "json_schema", "schema": _PRIORITY_SCHEMA}},
+    )
+    text = next((b.text for b in resp.content if b.type == "text"), "{}")
+    return json.loads(text)
 
 
 def monthly_report(notes: str) -> str:

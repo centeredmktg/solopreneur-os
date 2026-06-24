@@ -20,30 +20,52 @@ import httpx
 
 BASE_URL = os.environ.get("MOXIE_BASE_URL", "").rstrip("/")
 API_KEY = os.environ.get("MOXIE_API_KEY", "")
-# Default to the documented public-API namespace; override once verified.
+# Default to the documented public-API namespace; override once verified against
+# the workspace's live "Public API Endpoints & JSON Payloads" page.
 TIME_ENTRY_PATH = os.environ.get("MOXIE_TIME_ENTRY_PATH", "/api/public/timeentries/create")
+TASK_PATH = os.environ.get("MOXIE_TASK_PATH", "/api/public/tasks/create")
 
 
 def configured() -> bool:
     return bool(BASE_URL and API_KEY)
 
 
-def create_time_entry(description: str, minutes: int, client: str | None, date: str | None) -> dict:
-    """Create a single time entry in Moxie. Returns the API response JSON."""
+def _post(path: str, payload: dict) -> dict:
     if not configured():
         raise RuntimeError("Moxie not configured: set MOXIE_BASE_URL and MOXIE_API_KEY.")
-
-    payload: dict = {"description": description, "minutes": minutes}
-    if client:
-        payload["client"] = client
-    if date:
-        payload["date"] = date
-
     resp = httpx.post(
-        f"{BASE_URL}{TIME_ENTRY_PATH}",
+        f"{BASE_URL}{path}",
         headers={"X-API-KEY": API_KEY, "Content-Type": "application/json"},
         json=payload,
         timeout=30.0,
     )
     resp.raise_for_status()
     return resp.json()
+
+
+def create_time_entry(description: str, minutes: int, client: str | None, date: str | None) -> dict:
+    """Create a single time entry in Moxie. Returns the API response JSON."""
+    payload: dict = {"description": description, "minutes": minutes}
+    if client:
+        payload["client"] = client
+    if date:
+        payload["date"] = date
+    return _post(TIME_ENTRY_PATH, payload)
+
+
+def create_task(title: str, priority: str | None, deadline: str | None, client: str | None) -> dict:
+    """Create a single task in Moxie. Returns the API response JSON.
+
+    NOTE: Moxie tasks live under projects; the exact required fields (e.g. a
+    project_id, status mapping) render on the workspace's live API-payloads page.
+    Confirm and adjust this payload before relying on it in prod. Field names here
+    are a best-effort default and the path is overridable via MOXIE_TASK_PATH.
+    """
+    payload: dict = {"name": title}
+    if priority:
+        payload["priority"] = priority
+    if deadline:
+        payload["due_date"] = deadline
+    if client:
+        payload["client"] = client
+    return _post(TASK_PATH, payload)
