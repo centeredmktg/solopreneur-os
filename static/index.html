@@ -119,7 +119,10 @@ footer em{font-family:var(--serif);font-style:italic}
         <select id="p_client"><option value="">All / unspecified</option></select>
         <label>The dump</label>
         <textarea id="p_dump" placeholder="Paste the client's messages here — any format, any channel..."></textarea>
-        <button class="btn" data-run="priority">Organize it &nbsp;→</button>
+        <div class="row" style="margin-top:16px">
+          <button class="btn" style="margin-top:0" data-run="priority">Organize it &nbsp;→</button>
+          <button class="btn ghost" id="p_clear" type="button">Clear the dump</button>
+        </div>
       </div>
       <div class="panel"><div class="out" id="p_out"><span class="placeholder">Your sorted, editable plan will appear here.</span></div>
         <div class="out-actions" id="p_actions">
@@ -316,6 +319,15 @@ document.querySelectorAll("[data-run]").forEach(btn=>{
     finally{ runState(btn,false); }
   };
 });
+
+// ---- Priority: clear the dump (and reset the stale plan beside it) ----
+document.getElementById("p_clear").onclick = ()=>{
+  const dump = document.getElementById("p_dump");
+  dump.value = "";
+  document.getElementById("p_out").innerHTML = "<span class='placeholder'>Your sorted, editable plan will appear here.</span>";
+  document.getElementById("p_actions").style.display = "none";
+  dump.focus();
+};
 
 // ---- Priority: structured, editable, per-item assign, push ----
 function renderPriority(data){
